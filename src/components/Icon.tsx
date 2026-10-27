@@ -149,7 +149,7 @@ export function Icon({ name, filled, className, ...rest }: IconProps) {
       aria-hidden="true"
       {...rest}
     >
-      {ICONS[name] ?? ICONS.sparkles}
+      {ICONS[name] ?? ICONS["sparkles"]}
     </svg>
   );
 }

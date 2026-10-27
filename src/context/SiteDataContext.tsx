@@ -24,13 +24,15 @@ interface SiteDataContextValue {
     key: K,
     value: Partial<SiteData[K]>
   ) => void;
-  addItem: (key: ListKey, item: { id?: string }) => void;
+  addItem: (key: ListKey, item: Record<string, unknown> & { id?: string }) => void;
   updateItem: (key: ListKey, id: string, patch: Record<string, unknown>) => void;
   removeItem: (key: ListKey, id: string) => void;
   addEnquiry: (enquiry: Omit<Enquiry, "id" | "date" | "read">) => void;
   markEnquiryRead: (id: string, read: boolean) => void;
   resetData: () => void;
   isAdmin: boolean;
+  /** True once the client-side auth state has been read from storage. */
+  authReady: boolean;
   login: (username: string, password: string) => boolean;
   logout: () => void;
 }
@@ -41,11 +43,20 @@ function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function persist(data: SiteData) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage full/blocked: keep working in-memory.
+  }
+}
+
 export function SiteDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<SiteData>(defaultSiteData);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
 
-  // Load admin-saved edits once on the client (mock data only — no backend).
+  // Load admin-saved edits + auth state once on the client (mock data only — no backend).
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -57,26 +68,14 @@ export function SiteDataProvider({ children }: { children: ReactNode }) {
     } catch {
       // Corrupt or unavailable storage: fall back to defaults.
     }
-  }, []);
-
-  const persist = useCallback((next: SiteData) => {
-    setData(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Storage full/blocked: keep working in-memory.
-    }
+    setAuthReady(true);
   }, []);
 
   const updateSingleton = useCallback(
     <K extends "company" | "social" | "hero">(key: K, value: Partial<SiteData[K]>) => {
       setData((prev) => {
         const next = { ...prev, [key]: { ...prev[key], ...value } };
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          /* ignore */
-        }
+        persist(next);
         return next;
       });
     },
@@ -84,18 +83,14 @@ export function SiteDataProvider({ children }: { children: ReactNode }) {
   );
 
   const addItem = useCallback(
-    (key: ListKey, item: { id?: string }) => {
+    (key: ListKey, item: Record<string, unknown> & { id?: string }) => {
       setData((prev) => {
         const list = prev[key] as unknown[];
         const next = {
           ...prev,
           [key]: [{ id: item.id ?? uid(), ...item }, ...list],
         } as SiteData;
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          /* ignore */
-        }
+        persist(next);
         return next;
       });
     },
@@ -108,11 +103,7 @@ export function SiteDataProvider({ children }: { children: ReactNode }) {
         it.id === id ? { ...it, ...patch } : it
       );
       const next = { ...prev, [key]: list } as SiteData;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
+      persist(next);
       return next;
     });
   }, []);
@@ -121,11 +112,7 @@ export function SiteDataProvider({ children }: { children: ReactNode }) {
     setData((prev) => {
       const list = (prev[key] as Array<{ id: string }>).filter((it) => it.id !== id);
       const next = { ...prev, [key]: list } as SiteData;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
+      persist(next);
       return next;
     });
   }, []);
@@ -142,9 +129,12 @@ export function SiteDataProvider({ children }: { children: ReactNode }) {
     [addItem]
   );
 
-  const markEnquiryRead = useCallback((id: string, read: boolean) => {
-    updateItem("enquiries", id, { read });
-  }, [updateItem]);
+  const markEnquiryRead = useCallback(
+    (id: string, read: boolean) => {
+      updateItem("enquiries", id, { read });
+    },
+    [updateItem]
+  );
 
   const resetData = useCallback(() => {
     try {
@@ -188,6 +178,7 @@ export function SiteDataProvider({ children }: { children: ReactNode }) {
       markEnquiryRead,
       resetData,
       isAdmin,
+      authReady,
       login,
       logout,
     }),
@@ -201,6 +192,7 @@ export function SiteDataProvider({ children }: { children: ReactNode }) {
       markEnquiryRead,
       resetData,
       isAdmin,
+      authReady,
       login,
       logout,
     ]

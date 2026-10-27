@@ -34,7 +34,7 @@ export function Navbar() {
   }, [menuOpen]);
 
   const tone: "light" | "dark" = scrolled ? "dark" : "light";
-  const phoneHref = `tel:${data.company.phones[0].replace(/\s/g, "")}`;
+  const phoneHref = `tel:${(data.company.phones[0] ?? "").replace(/\s/g, "")}`;
 
   return (
     <header
